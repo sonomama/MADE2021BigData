@@ -1,0 +1,29 @@
+1. hdfs dfs -mkdir /dir
+2. hdfs dfs -mkdir /dir/another_dir
+3. Trash holds files deleted from hdfs, which prevents you from accidentally deleting files. The files are stored for the amount of time indicated in fs.trash.interval. In order to get deleted permanently: hdfs dfs -rm -skipTrash <file>
+4. hdfs dfs -touchz /dir/another_dir/empty_file 
+5. hdfs dfs -rm -skipTrash /dir/another_dir/empty_file
+6. hdfs dfs -rm -r -skipTrash /dir
+
+----------------------------------------------------------
+
+1. docker cp my_file.txt namenode:/
+   hdfs dfs -mkdir /new_dir         
+   hdfs dfs -put my_file.txt /new_dir
+
+2. hdfs dfs -cat /new_dir/my_file.txt
+3. hdfs dfs -cat /new_dir/my_file.txt | tail -n 3
+4. hdfs dfs -cat /new_dir/my_file.txt | head -n 3
+
+5. hdfs dfs -mkdir /another_dir
+   hdfs dfs -cp /new_dir/my_file.txt /another_dir
+
+----------------------------------------------------------
+
+hdfs dfs -setrep -w 2 /another_dir/my_file.txt
+I first reduced the number of replicas to 2 and then back to 3.
+Both of the operations were fast, however I got the warning
+WARNING: the waiting time may be long for DECREASING the number of replications
+
+hdfs fsck /another_dir -files -blocks -locations
+hdfs fsck -blockId blk_1073741837 
