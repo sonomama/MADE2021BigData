@@ -1,0 +1,155 @@
+1. Creating table
+______________________________________________________________________
+docker cp artists.csv docker-hadoop-hive-parquet_hive-server_1:/
+docker exec -it docker-hadoop-hive-parquet_hive-server_1 /bin/bash
+root@3816da146ac1:/opt# cp ../artists.csv hive/bin
+
+Then in the hive container:
+
+CREATE TABLE artists (mbid STRING, artist_mb STRING, artist_lastfm STRING, 
+                      country_mb STRING, country_lastfm STRING, tags_mb STRING, 
+                      tags_lastfm STRING, listeners_lastfm INT, scrobbles_lastfm INT, 
+                       ambiguous_artist BOOLEAN)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+TBLPROPERTIES(“skip.header.line.count"="1");
+
+LOAD DATA LOCAL INPATH "artists.csv"
+OVERWRITE INTO TABLE artists;
+_______________________________________________________________________
+2. 
+a) Max number of scrobbles
+
+SELECT artist_mb, scrobbles_lastfm 
+FROM artists
+ORDER BY scrobbles_lastfm DESC
+LIMIT 1;
+
+Ouput:
++----------------+-------------------+
+| artist_lastfm  | scrobbles_lastfm  |
++----------------+-------------------+
+| The Beatles    | 517126254         |
++----------------+-------------------+
+
+
+b) The most popular tag (10 most popular)
+
+SELECT TRIM(tag) AS tag, COUNT(tag) AS count_tag
+FROM artists LATERAL VIEW EXPLODE(SPLIT(tags_lastfm, ";")) tagsTable AS tag
+WHERE tag != ""
+GROUP BY tag
+ORDER BY count_tag DESC
+LIMIT 10;
+
++-----------------------+------------+
+|          tag                      | count_tag  |
++-----------------------+------------+
+| seen live                    | 81278      |
+| rock                           | 64902      |
+| electronic                  | 58163      |
+| All                             | 48631      |
+| under 2000 listeners  | 48301      |
+| alternative                 | 42067      |
+| pop                            | 41557      |
+| indie                          | 39333      |
+| experimental             | 37665      |
+| female vocalists        | 33097      |
++-----------------------+------------+
+
+c) Most popular artists for ten most popular tags
+For this one I created several tables.
+ 
+First I saved the above table with CREATE TABLE tags AS (QUERY).
+Next, we get a table artist - scrobbles - single tag (not a string of tags)
+---------------------------------------------------------------------------
+CREATE TABLE clean_artists AS
+SELECT artist_lastfm, scrobbles_lastfm, TRIM(tag) AS tag
+FROM artists LATERAL VIEW EXPLODE(SPLIT(tags_lastfm, ";")) tagsTable AS tag WHERE tag!="";
+------------------------------------------------------------------------------
+Next, we filter clean_artists using the most popular tags
+
+------------------------------------------------------------------------------
+CREATE TABLE pop_tags_artists AS
+SELECT artist_lastfm, scrobbles_lastfm, clean_artists.tag FROM clean_artists JOIN tags ON
+(clean_artists.tag = tags.tag);
+------------------------------------------------------------------------------
+So now we need to filter these artists again, finding those with the maximum number of scrobbles corresponding to their tag. 
+We do that by creating another table:
+
+------------------------------------------------------------------------------
+CREATE TABLE max_tags AS
+SELECT tag, MAX(scrobbles_lastfm) AS scrobbles FROM pop_tags_artists
+GROUP BY tag;
+------------------------------------------------------------------------------
+Finally, we need to join the pop_tags_artists with max_tags on the tag and the number of scrobbles:
+
+------------------------------------------------------------------------------
+SELECT artist_lastfm, pop_tags_artists.scrobbles_lastfm, pop_tags_artists.tag FROM pop_tags_artists 
+JOIN max_tags ON
+(pop_tags_artists.tag=max_tags.tag AND pop_tags_artists.scrobbles_lastfm=max_tags.scrobbles) 
+ORDER BY pop_tags_artists.scrobbles_lastfm DESC;
+
+The output:
++----------------+------------------------------------+-----------------------+
+| artist_lastfm  | pop_tags_artists.scrobbles_lastfm  | pop_tags_artists.tag  |
++----------------+------------------------------------+-----------------------+
+| The Beatles    | 517126254                          | pop                   |
+| The Beatles    | 517126254                          | rock                  |
+| Radiohead      | 499548797                          | experimental          |
+| Radiohead      | 499548797                          | seen live             |
+| Radiohead      | 499548797                          | electronic            |
+| Radiohead      | 499548797                          | indie                 |
+| Radiohead      | 499548797                          | alternative           |
+| Lady Gaga      | 285469647                          | female vocalists      |
+| Ariana Grande  | 106673207                          | All                   |
+| Joyce Manor    | 10993278                           | under 2000 listeners  |
++----------------+------------------------------------+-----------------------+
+
+3. 
+
+a) The most popular tag for artists from UK is … “british” :)
+
+SELECT TRIM(tag) AS tag, COUNT(tag) AS count_tag
+FROM artists LATERAL VIEW EXPLODE(split(tags_lastfm, ";")) tagsTable AS tag 
+WHERE tag != "" AND country_lastfm="United Kingdom"
+GROUP BY tag
+ORDER BY count_tag DESC LIMIT 1;
+
++----------+------------+
+|   tag    | count_tag  |
++----------+------------+
+| british  | 8675       |
++----------+------------+
+
+b) Countries of artists origins with the biggest number of listeners:
+
+SELECT country_lastfm, SUM(listeners_lastfm) AS total_listeners FROM artists
+GROUP BY country_lastfm
+ORDER BY total_listeners DESC LIMIT 10;
+
++--------------------------------+------------------+
+|         country_lastfm         | total_listeners  |
++--------------------------------+------------------+
+| United States                  | 1581494306       |
+|                                        | 1189114073       |
+| United Kingdom            | 666505186        |
+| Germany                        | 166813640        |
+| Canada                           | 132915444        |
+| Sweden                          | 127755125        |
+| France                            | 104765971        |
+| Australia                         | 86895697         |
+| Japan                               | 73844073         |
+| United Kingdom; United States  | 61820043         |
++--------------------------------+------------------+
+
+
+
+
+
+
+
+
+
+
+
