@@ -1,3 +1,3 @@
 # MADE2021BigData
 
-Homeworks for mail.ru MADE Big Data course, 2021
+Homeworks for VK MADE Big Data course, 2021
