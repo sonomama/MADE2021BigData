@@ -1,0 +1,1 @@
+The task in this hw is to implement random hyper planes hashing for the Locality Sensitive Hashing (LSH) based on ```org.apache.spark.ml.feature.{LSH, LSHModel}```.
